@@ -1,0 +1,45 @@
+config AP6211
+	tristate "AMPAK AP6211 wireless/bluetooth module support"
+	depends on MMC
+	default n
+	---help---
+	  This module adds support for the wireless and bluetooth
+	  module of the CubieTruck.
+
+config AP6211_FW_PATH
+	depends on AP6211
+	string "Firmware path"
+	default "/system/vendor/modules/fw_bcmxxxx.bin"
+	---help---
+	  Path to the firmware file.
+
+config AP6211_NVRAM_PATH
+	depends on AP6211
+	string "NVRAM path"
+	default "/system/vendor/modules/nvram_apxxxx.txt"
+	---help---
+	  Path to the calibration file.
+
+config AP6211_WEXT
+	bool "Enable WEXT support"
+	depends on AP6211 && CFG80211 = n
+	select WIRELESS_EXT
+	select WEXT_PRIV
+	help
+	  Enables WEXT support
+
+choice
+    depends on AP6211
+    prompt "Interrupt type"
+config AP6211_OOB
+	depends on AP6211
+	bool "Out-of-Band Interrupt"
+	---help---
+		Interrupt through WL_HOST_WAKE.
+config AP6211_SDIO_IRQ
+	depends on  AP6211
+	bool "In-Band Interrupt"
+	default y
+	---help---
+		Interrupt through SDIO DAT[1]
+endchoice
