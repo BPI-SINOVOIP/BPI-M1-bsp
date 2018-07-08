@@ -1,7 +1,7 @@
 setenv device mmc
 setenv partition 0:1
 setenv bpi bananapi
-#setenv board bpi-m1
+setenv board bpi-m1
 setenv chip a20
 setenv service linux
 #setenv kernel uImage
