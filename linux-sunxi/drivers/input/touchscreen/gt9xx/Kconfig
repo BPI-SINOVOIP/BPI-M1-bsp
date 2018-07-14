@@ -1,0 +1,8 @@
+#
+# SW Touchscreen driver configuration
+#
+config  TOUCHSCREEN_GT9XX
+       tristate  "gt9xx touchscreen driver"      
+       depends on I2C
+       help
+         gt9xx touchscreen driver    

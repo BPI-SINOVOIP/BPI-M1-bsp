@@ -893,4 +893,7 @@ config  TOUCHSCREEN_COASIA
        tristate  "COASIA touchscreen driver"
        help
           COASIA touchscreen driver
+
+source "drivers/input/touchscreen/gt9xx/Kconfig"
+
 endif

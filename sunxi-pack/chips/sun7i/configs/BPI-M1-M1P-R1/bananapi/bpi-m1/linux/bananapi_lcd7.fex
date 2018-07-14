@@ -266,9 +266,9 @@ manual_cs = 0
 
 [ctp_para]
 ctp_used = 1
-ctp_name = "ft5x_ts"
+ctp_name = "gt9xx"
 ctp_twi_id = 3
-ctp_twi_addr = 0x38
+ctp_twi_addr = 0x14
 ctp_screen_max_x = 800
 ctp_screen_max_y = 480
 ctp_revert_x_flag = 0
@@ -276,8 +276,8 @@ ctp_revert_y_flag = 0
 ctp_exchange_x_y_flag = 0
 ctp_firm = 1
 ctp_int_port = port:PH07<6><default><default><default>
-ctp_wakeup = port:PH08<1><default><default><1>
-ctp_io_port = port:PH07<0><default><default><default>
+ctp_wakeup = port:PH07<0><default><default><default>
+ctp_reset = port:PH08<1><default><default><1>
 
 [ctp_list_para]
 ctp_det_used = 0
