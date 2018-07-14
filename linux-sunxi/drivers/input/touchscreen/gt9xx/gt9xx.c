@@ -491,6 +491,21 @@ void gtp_gpio_free(u32 p_handler)
 	gpio_release(p_handler, 2);
 }
 
+void gtp_io_init(u8 addr, int ms)
+{       
+	gtp_gpio_as_output(gpio_reset_hdle, 0, "ctp_reset");   // begin select I2C slave addr
+	msleep(ms);						   // T2: > 10ms
+
+	// HIGH: 0x28/0x29, LOW: 0xBA/0xBB
+	gtp_gpio_as_output(gpio_wakeup_hdle, addr == 0x14, "ctp_wakeup");
+	
+	msleep(2);						   // T3: > 100us
+	gtp_gpio_as_output(gpio_reset_hdle, 1, "ctp_reset");
+
+	msleep(6);						   // T4: > 5ms
+	gtp_gpio_as_input(gpio_reset_hdle, "ctp_reset");    // end select I2C slave addr
+}
+
 
 /*******************************************************
 Function:
@@ -2961,19 +2976,16 @@ static int goodix_ts_remove(struct i2c_client *client)
 	cancel_work_sync(&ts->work);
 	destroy_workqueue(goodix_wq);
 
-    if (ts) 
-    {
-        if (ts->use_irq)
+	if (ts->use_irq)
         {
             gtp_gpio_as_input(gpio_wakeup_hdle, "ctp_int_port");
             gpio_release(gpio_wakeup_hdle, 2);
             free_irq(SW_INT_IRQNO_PIO, ts);
         }
-        else
-        {
-            hrtimer_cancel(&ts->timer);
-        }
-    }   
+	else
+    {
+        hrtimer_cancel(&ts->timer);
+    } 
 
     GTP_INFO("GTP driver removing...");
 	
@@ -3512,6 +3524,8 @@ static int __devinit goodix_ts_init(void)
     INIT_DELAYED_WORK(&gtp_esd_check_work, gtp_esd_check_func);
     gtp_esd_check_workqueue = create_workqueue("gtp_esd_check");
 #endif
+
+	gtp_io_init(u_i2c_addr.normal_i2c[0], 1);
 
 	goodix_ts_driver.detect = ctp_detect;
 
