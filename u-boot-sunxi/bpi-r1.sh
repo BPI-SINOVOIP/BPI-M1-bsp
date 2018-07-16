@@ -4,6 +4,7 @@ set -e
 
 BPIBOARD=bpi-r1
 MODE=$1
+TYPE=$2
 
 generate_board_config() {
         cat <<-EOT
@@ -15,7 +16,16 @@ generate_board_config() {
 	CONFIG_BPI_PATH="bananapi/${BPIBOARD}/linux/"
 	CONFIG_BPI_UENVFILE="bananapi/${BPIBOARD}/linux/uEnv.txt"
 	EOT
+}
 
+generate_lcd_config() {
+        cat <<-EOT
+	CONFIG_VIDEO_LCD_MODE="x:800,y:480,depth:24,pclk_khz:30000,le:40,ri:40,up:29,lo:13,hs:48,vs:3,sync:3,vmode:0"
+	CONFIG_VIDEO_LCD_POWER="PH12"
+	CONFIG_VIDEO_LCD_BL_EN="PH9"
+	CONFIG_VIDEO_LCD_BL_PWM="PB2"
+	CONFIG_VIDEO_LCD_BL_PWM_ACTIVE_LOW=y
+	EOT
 }
 
 export BOARD=${BPIBOARD}
@@ -32,7 +42,14 @@ else
 	cat configs/$BPICONF >configs/$NEWBPICONF
 	generate_board_config "$1" >> configs/$NEWBPICONF
 fi
+
+if [ "$2" = "lcd" ]; then
+	TYPE=lcd
+	generate_lcd_config "$1" >> configs/$NEWBPICONF
+fi
+
 echo MODE=$MODE
+echo TYPE=$TYPE
 
 KBUILD_OUTPUT=out/$BOARD
 export KBUILD_OUTPUT
