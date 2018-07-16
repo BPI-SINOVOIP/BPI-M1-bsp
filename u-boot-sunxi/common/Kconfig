@@ -247,6 +247,12 @@ config BPI_UENVFILE
 	---help---
 	BPI_UENVFILE(bananapi/board/service/uEnv.txt)
 
+config BPI_SPLASHFILE
+	string "BPI_SPLASHFILE(bananapi/board/service/bootlogo.bmp)"
+	default "bootlogo.bmp"
+	---help---
+	BPI_SPLASHFILE(bananapi/board/service/bootlogo.bmp)
+
 menu "Console"
 
 config MENU

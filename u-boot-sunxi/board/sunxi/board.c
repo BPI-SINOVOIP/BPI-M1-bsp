@@ -13,6 +13,7 @@
 
 #include <common.h>
 #include <mmc.h>
+#include <splash.h>
 #include <axp_pmic.h>
 #include <asm/arch/clock.h>
 #include <asm/arch/cpu.h>
@@ -172,6 +173,30 @@ void i2c_init_board(void)
 	sunxi_gpio_set_cfgpin(SUNXI_GPL(1), SUN8I_H3_GPL_R_TWI);
 #endif
 }
+
+#ifdef CONFIG_SPLASH_SCREEN
+struct splash_location splash_locations[] = {
+	{
+		.name = "mmc_fs",
+		.storage = SPLASH_STORAGE_MMC,
+		.flags = SPLASH_STORAGE_FS,
+		.devpart = "0:1",
+	},
+};
+
+int splash_screen_prepare(void)
+{
+	printf("splash_screen_prepare\n");
+	return splash_source_load(splash_locations,
+				  ARRAY_SIZE(splash_locations));
+}
+
+int board_cfb_skip(void)
+{
+	printf("splash screen enabled, disable cfb");
+	return 1;
+}
+#endif
 
 /* add board specific code here */
 int board_init(void)

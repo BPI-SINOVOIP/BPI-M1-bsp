@@ -286,6 +286,15 @@ extern int soft_i2c_gpio_scl;
 #define CONFIG_VIDEO_BMP_LOGO
 #endif
 #define CONFIG_VIDEO_STD_TIMINGS
+
+/* bpi, splash screen enable */
+/*#define CONFIG_SPLASH_SCREEN*/
+#ifdef CONFIG_SPLASH_SCREEN
+#define CONFIG_SPLASH_SCREEN_ALIGN
+#define CONFIG_SPLASH_SOURCE
+#define CONFIG_CMD_BMP
+#endif
+
 #define CONFIG_I2C_EDID
 #define VIDEO_LINE_LEN (pGD->plnSizeX)
 
@@ -546,6 +555,8 @@ extern int soft_i2c_gpio_scl;
 	DFU_ALT_INFO_RAM \
 	"fdtfile=" FDTFILE "\0" \
 	"console=ttyS0,115200\0" \
+	"splashimage=0x4a100000\0" \
+	"splashfile=" CONFIG_BPI_SPLASHFILE "\0" \
 	SUNXI_MTDIDS_DEFAULT \
 	SUNXI_MTDPARTS_DEFAULT \
 	"uuid_gpt_esp=" UUID_GPT_ESP "\0" \

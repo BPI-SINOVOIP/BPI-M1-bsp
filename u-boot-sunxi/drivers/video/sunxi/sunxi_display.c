@@ -1149,6 +1149,7 @@ void *video_hw_init(void)
 			sunxi_display.monitor = sunxi_monitor_none;
 			return NULL;
 		}
+		printf("LCD connected\n");
 		sunxi_display.depth = video_get_params(&custom, lcd_mode);
 		mode = &custom;
 		break;

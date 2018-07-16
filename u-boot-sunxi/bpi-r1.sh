@@ -15,6 +15,7 @@ generate_board_config() {
 	CONFIG_BPI_SERVICE="linux"
 	CONFIG_BPI_PATH="bananapi/${BPIBOARD}/linux/"
 	CONFIG_BPI_UENVFILE="bananapi/${BPIBOARD}/linux/uEnv.txt"
+	CONFIG_BPI_SPLASHFILE="bananapi/${BPIBOARD}/linux/bootlogo.bmp"
 	EOT
 }
 
