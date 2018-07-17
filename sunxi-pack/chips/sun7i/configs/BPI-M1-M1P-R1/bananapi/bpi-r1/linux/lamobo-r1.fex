@@ -117,10 +117,14 @@ gmac_txctl = port:PA13<5><default><3><default>
 gmac_txclk = port:PA14<0><default><3><default>
 gmac_txck = port:PA15<5><default><3><default>
 gmac_clkin = port:PA16<5><default><3><default>
-gmac_txerr = port:PA17<0><default><3><default>
+;gmac_txerr = port:PA17<0><default><3><default>
 
 [gmac_phy_power]
 gmac_phy_power_en = port:PH23<1><default><default><0>
+
+[b53_para]
+b53_used = 1
+b53_reset = port:PA17<1><default><default><default>
 
 [twi0_para]
 twi0_used = 1

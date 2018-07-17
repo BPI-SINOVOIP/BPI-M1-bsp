@@ -19,7 +19,9 @@
 #include <linux/kernel.h>
 #include <linux/phy.h>
 #include <linux/module.h>
+#include <linux/of.h>
 
+#include "b53_regs.h"
 #include "b53_priv.h"
 
 #define B53_PSEUDO_PHY	0x1e /* Register Access Pseudo PHY */
@@ -256,6 +258,8 @@ static int b53_phy_probe(struct phy_device *phydev)
 	struct b53_device dev;
 	int ret;
 
+	pr_info("%s\n", __func__);
+
 	/* allow the generic phy driver to take over */
 	if (phydev->addr != B53_PSEUDO_PHY && phydev->addr != 0)
 		return -ENODEV;
@@ -325,17 +329,38 @@ static int b53_phy_config_aneg(struct phy_device *phydev)
 static int b53_phy_read_status(struct phy_device *phydev)
 {
 	struct b53_device *priv = phydev->priv;
-
+#if 0
+	/* bpi, link always up so that br-lan can enter forwarding state */
+	u16 lnk;
+#endif
 	if (is5325(priv) || is5365(priv))
 		phydev->speed = 100;
 	else
 		phydev->speed = 1000;
 
 	phydev->duplex = DUPLEX_FULL;
+
+#if 1
+	/* Lan can't assign ip address to client because br-lan did not enter forwarding state. 
+	 * If kernel report the right link state to /sys/class/net/eth0/carrier, and bootup without 
+	 * wan cable connected, openwrt system consider eth0.1 and eth0.2 are not ready, 
+	 * and br-lan will not enter forwarding state. So we must revert the modify before, 
+	 * You can use swconfig command to get each port state.
+	 */
 	phydev->link = 1;
 	phydev->state = PHY_RUNNING;
+#else
+	/* bpi, read and update linkstate for port 3 */
+	b53_read16(priv, B53_STAT_PAGE, B53_LINK_STAT, &lnk);
+	lnk = (lnk >> 3) & 1;
+	phydev->link = lnk;
+#endif
 
-	netif_carrier_on(phydev->attached_dev);
+	if (phydev->link)
+		netif_carrier_on(phydev->attached_dev);
+	else
+		netif_carrier_off(phydev->attached_dev);
+
 	phydev->adjust_link(phydev->attached_dev);
 
 	return 0;
@@ -391,7 +416,20 @@ static struct phy_driver b53_phy_driver_id3 = {
 
 int __init b53_phy_driver_register(void)
 {
-	int ret;
+	user_gpio_set_t gpio = { " ", 0 };
+	int ret, b53_used;
+
+	ret = script_parser_fetch("b53_para", "b53_used", &b53_used, 1);
+	if (ret != 0 || !b53_used)
+		return -ENODEV;
+
+	ret = script_parser_fetch("b53_para", "b53_reset",
+				  (int *)&gpio, (sizeof(gpio) >> 2));
+	if (ret != 0)
+		return -ENODEV;
+
+	pr_info("%s, b53 init\n", __func__);
+
 
 	ret = phy_driver_register(&b53_phy_driver_id1);
 	if (ret)

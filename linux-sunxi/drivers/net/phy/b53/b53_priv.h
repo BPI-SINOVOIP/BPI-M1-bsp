@@ -22,6 +22,8 @@
 #include <linux/kernel.h>
 #include <linux/mutex.h>
 #include <linux/switch.h>
+#include <linux/of_gpio.h>
+#include <plat/sys_config.h>
 
 struct b53_device;
 
@@ -82,6 +84,7 @@ struct b53_device {
 	u8 jumbo_pm_reg;
 	u8 jumbo_size_reg;
 	int reset_gpio;
+	unsigned gpio_handle;
 
 	/* used ports mask */
 	u16 enabled_ports;
@@ -150,7 +153,7 @@ static inline int is63xx(struct b53_device *dev)
 	return 0;
 #endif
 }
-	
+
 static inline int is5301x(struct b53_device *dev)
 {
 	return dev->chip_id == BCM53010_DEVICE_ID ||
@@ -318,7 +321,29 @@ static inline int b53_switch_get_reset_gpio(struct b53_device *dev)
 #else
 static inline int b53_switch_get_reset_gpio(struct b53_device *dev)
 {
-	return -ENOENT;
+#if 0
+	struct gpio_config reset_gpio;
+	struct device_node *np = NULL;
+	int ret = -1;
+
+	np = of_find_node_by_name(NULL, "b53_para");
+	if (!np) {
+		pr_err("ERROR! get b53_para failed\n");
+		return -1;
+	}
+
+	reset_gpio.gpio = of_get_named_gpio_flags(np, "b53_reset", 0,
+				(enum of_gpio_flags *)&reset_gpio);
+	
+	if (!gpio_is_valid(reset_gpio.gpio)) {
+		pr_err("%s: b53_reset is invalid\n", __func__);
+		return ret;
+	}
+
+	return reset_gpio.gpio;
+#else
+	return 0;
+#endif
 }
 #endif
 #endif
