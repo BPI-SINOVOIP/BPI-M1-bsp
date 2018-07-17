@@ -80,7 +80,7 @@ kernel-config: $(K_DOT_CONFIG)
 	cp linux-sunxi/.config linux-sunxi/arch/arm/configs/$(KERNEL_CONFIG)
 
 ## bsp
-bsp: u-boot kernel
+bsp: kernel
 
 ## linux
 linux: 
