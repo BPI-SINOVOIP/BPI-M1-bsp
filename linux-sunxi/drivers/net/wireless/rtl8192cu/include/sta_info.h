@@ -15,8 +15,8 @@
  * this program; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110, USA
  *
- * 
-******************************************************************************/
+ *
+ ******************************************************************************/
 #ifndef __STA_INFO_H_
 #define __STA_INFO_H_
 
@@ -27,7 +27,7 @@
 
 #define IBSS_START_MAC_ID	2
 #define NUM_STA 32
-#define NUM_ACL 64
+#define NUM_ACL 16
 
 
 //if mode ==0, then the sta is allowed once the addr is hit.
@@ -35,25 +35,50 @@
 struct rtw_wlan_acl_node {
         _list		        list;
         u8       addr[ETH_ALEN];
-        u8       mode;
+        u8       valid;
 };
 
+//mode=0, disable
+//mode=1, accept unless in deny list
+//mode=2, deny unless in accept list
 struct wlan_acl_pool {
-        struct rtw_wlan_acl_node aclnode[NUM_ACL];
+	int mode;
+	int num;
+	struct rtw_wlan_acl_node aclnode[NUM_ACL];
+	_queue	acl_node_q;
 };
 
 typedef struct _RSSI_STA{
-	int	UndecoratedSmoothedPWDB;
-	int	UndecoratedSmoothedCCK;
+	s32	UndecoratedSmoothedPWDB;
+	s32	UndecoratedSmoothedCCK;
+	s32	UndecoratedSmoothedOFDM;
+	u64	PacketMap;
+	u8	ValidBit;
 }RSSI_STA, *PRSSI_STA;
 
 struct	stainfo_stats	{
 
-	u64	rx_pkts;
+	u64 rx_mgnt_pkts;
+		u64 rx_beacon_pkts;
+		u64 rx_probereq_pkts;
+		u64 rx_probersp_pkts;
+		u64 rx_probersp_bm_pkts;
+		u64 rx_probersp_uo_pkts;
+	u64 rx_ctrl_pkts;
+	u64 rx_data_pkts;
+
+	u64	last_rx_mgnt_pkts;
+		u64 last_rx_beacon_pkts;
+		u64 last_rx_probereq_pkts;
+		u64 last_rx_probersp_pkts;
+		u64 last_rx_probersp_bm_pkts;
+		u64 last_rx_probersp_uo_pkts;
+	u64	last_rx_ctrl_pkts;
+	u64	last_rx_data_pkts;
+	
 	u64	rx_bytes;
 	u64	rx_drops;
-	u64	last_rx_pkts;
-	
+
 	u64	tx_pkts;
 	u64	tx_bytes;
 	u64  tx_drops;
@@ -65,7 +90,7 @@ struct TDLS_PeerKey {
 	u8 kck[16]; /* TPK-KCK */
 	u8 tk[16]; /* TPK-TK; only CCMP will be used */
 } ;
-#endif
+#endif //CONFIG_TDLS
 
 struct sta_info {
 
@@ -94,6 +119,9 @@ struct sta_info {
 	union Keytype	dot11tkiprxmickey;
 	union Keytype	dot118021x_UncstKey;	
 	union pn48		dot11txpn;			// PN48 used for Unicast xmit.
+#ifdef CONFIG_IEEE80211W
+	union pn48		dot11wtxpn;			// PN48 used for Unicast mgmt xmit.
+#endif //CONFIG_IEEE80211W
 	union pn48		dot11rxpn;			// PN48 used for Unicast recv.
 
 
@@ -107,10 +135,12 @@ struct sta_info {
 
 	u8	raid;
 	u8 	init_rate;
-
+	u32	ra_mask;
 	struct stainfo_stats sta_stats;
 
 #ifdef CONFIG_TDLS
+	u32	tdls_sta_state;
+	u8	dialog;
 	u8	SNonce[32];
 	u8	ANonce[32];
 	u32	TDLS_PeerKey_Lifetime;
@@ -118,19 +148,21 @@ struct sta_info {
 	_timer	TPK_timer;
 	struct TDLS_PeerKey	tpk;
 	_adapter *padapter;
-	u8	cam_entry;
 	u16	stat_code;
 	u8	off_ch;
 	u16	ch_switch_time;
 	u16	ch_switch_timeout;
 	u8	option;
-	_workitem	option_workitem;
 	_timer	option_timer;
-	_workitem	base_ch_workitem;
 	_timer	base_ch_timer;
-	_workitem	off_ch_workitem;
 	_timer	off_ch_timer;
-#endif
+
+	_timer handshake_timer;
+	_timer alive_timer1;
+	_timer alive_timer2;
+	u8 timer_flag;
+	u8 alive_count;
+#endif //CONFIG_TDLS
 
 	//for A-MPDU TX, ADDBA timeout check	
 	_timer addba_retry_timer;
@@ -176,6 +208,8 @@ struct sta_info {
 	int wpa_pairwise_cipher;
 	int wpa2_pairwise_cipher;	
 
+	u8 bpairwise_key_installed;
+
 #ifdef CONFIG_NATIVEAP_MLME
 	u8 wpa_ie[32];
 
@@ -220,16 +254,103 @@ struct sta_info {
 	u8 under_exist_checking;
 #endif	// CONFIG_TX_MCAST2UNI
 	
+	u8 keep_alive_trycnt;
+
 #endif	// CONFIG_AP_MODE	
+
+#ifdef CONFIG_IOCTL_CFG80211
+	u8 *passoc_req;
+	u32 assoc_req_len;
+#endif
 
 	//for DM
 	RSSI_STA	 rssi_stat;
 	
-
+        /* To store the sequence number of received management frame */
+	u16 RxMgmtFrameSeqNum;
 };
 
+#define sta_rx_pkts(sta) \
+	(sta->sta_stats.rx_mgnt_pkts \
+	+ sta->sta_stats.rx_ctrl_pkts \
+	+ sta->sta_stats.rx_data_pkts)
 
+#define sta_last_rx_pkts(sta) \
+	(sta->sta_stats.last_rx_mgnt_pkts \
+	+ sta->sta_stats.last_rx_ctrl_pkts \
+	+ sta->sta_stats.last_rx_data_pkts)
 
+#define sta_rx_data_pkts(sta) \
+	(sta->sta_stats.rx_data_pkts)
+
+#define sta_last_rx_data_pkts(sta) \
+	(sta->sta_stats.last_rx_data_pkts)
+
+#define sta_rx_mgnt_pkts(sta) \
+	(sta->sta_stats.rx_mgnt_pkts)
+
+#define sta_last_rx_mgnt_pkts(sta) \
+	(sta->sta_stats.last_rx_mgnt_pkts)
+
+#define sta_rx_beacon_pkts(sta) \
+	(sta->sta_stats.rx_beacon_pkts)
+
+#define sta_last_rx_beacon_pkts(sta) \
+	(sta->sta_stats.last_rx_beacon_pkts)
+
+#define sta_rx_probereq_pkts(sta) \
+	(sta->sta_stats.rx_probereq_pkts)
+
+#define sta_last_rx_probereq_pkts(sta) \
+	(sta->sta_stats.last_rx_probereq_pkts)
+
+#define sta_rx_probersp_pkts(sta) \
+	(sta->sta_stats.rx_probersp_pkts)
+
+#define sta_last_rx_probersp_pkts(sta) \
+	(sta->sta_stats.last_rx_probersp_pkts)
+
+#define sta_rx_probersp_bm_pkts(sta) \
+	(sta->sta_stats.rx_probersp_bm_pkts)
+
+#define sta_last_rx_probersp_bm_pkts(sta) \
+	(sta->sta_stats.last_rx_probersp_bm_pkts)
+
+#define sta_rx_probersp_uo_pkts(sta) \
+	(sta->sta_stats.rx_probersp_uo_pkts)
+
+#define sta_last_rx_probersp_uo_pkts(sta) \
+	(sta->sta_stats.last_rx_probersp_uo_pkts)
+
+#define sta_update_last_rx_pkts(sta) \
+	do { \
+		sta->sta_stats.last_rx_mgnt_pkts = sta->sta_stats.rx_mgnt_pkts; \
+		sta->sta_stats.last_rx_beacon_pkts = sta->sta_stats.rx_beacon_pkts; \
+		sta->sta_stats.last_rx_probereq_pkts = sta->sta_stats.rx_probereq_pkts; \
+		sta->sta_stats.last_rx_probersp_pkts = sta->sta_stats.rx_probersp_pkts; \
+		sta->sta_stats.last_rx_probersp_bm_pkts = sta->sta_stats.rx_probersp_bm_pkts; \
+		sta->sta_stats.last_rx_probersp_uo_pkts = sta->sta_stats.rx_probersp_uo_pkts; \
+		sta->sta_stats.last_rx_ctrl_pkts = sta->sta_stats.rx_ctrl_pkts; \
+		sta->sta_stats.last_rx_data_pkts = sta->sta_stats.rx_data_pkts; \
+	} while(0)
+
+#define STA_RX_PKTS_ARG(sta) \
+	sta->sta_stats.rx_mgnt_pkts \
+	, sta->sta_stats.rx_ctrl_pkts \
+	, sta->sta_stats.rx_data_pkts
+
+#define STA_LAST_RX_PKTS_ARG(sta) \
+	sta->sta_stats.last_rx_mgnt_pkts \
+	, sta->sta_stats.last_rx_ctrl_pkts \
+	, sta->sta_stats.last_rx_data_pkts
+
+#define STA_RX_PKTS_DIFF_ARG(sta) \
+	sta->sta_stats.rx_mgnt_pkts - sta->sta_stats.last_rx_mgnt_pkts \
+	, sta->sta_stats.rx_ctrl_pkts - sta->sta_stats.last_rx_ctrl_pkts \
+	, sta->sta_stats.rx_data_pkts -sta->sta_stats.last_rx_data_pkts
+
+#define STA_PKTS_FMT "(m:%llu, c:%llu, d:%llu)"
+	
 struct	sta_priv {
 	
 	u8 *pallocated_stainfo_buf;
@@ -250,6 +371,8 @@ struct	sta_priv {
 	_list auth_list;
 	_lock asoc_list_lock;
 	_lock auth_list_lock;
+	u8 asoc_list_cnt;
+	u8 auth_list_cnt;
 
 	unsigned int auth_to;  //sec, time to expire in authenticating.
 	unsigned int assoc_to; //sec, time to expire before associating.
@@ -265,6 +388,8 @@ struct	sta_priv {
 	u16 tim_bitmap;//only support 15 stations, aid=0~15 mapping bit0~bit15	
 
 	u16 max_num_sta;
+
+	struct wlan_acl_pool acl_list;
 #endif		
 	
 };
@@ -290,12 +415,18 @@ __inline static u32 wifi_mac_hash(u8 *mac)
 
 extern u32	_rtw_init_sta_priv(struct sta_priv *pstapriv);
 extern u32	_rtw_free_sta_priv(struct sta_priv *pstapriv);
+
+#define stainfo_offset_valid(offset) (offset < NUM_STA && offset >= 0)
+int rtw_stainfo_offset(struct sta_priv *stapriv, struct sta_info *sta);
+struct sta_info *rtw_get_stainfo_by_offset(struct sta_priv *stapriv, int offset);
+
 extern struct sta_info *rtw_alloc_stainfo(struct	sta_priv *pstapriv, u8 *hwaddr);
 extern u32	rtw_free_stainfo(_adapter *padapter , struct sta_info *psta);
 extern void rtw_free_all_stainfo(_adapter *padapter);
 extern struct sta_info *rtw_get_stainfo(struct sta_priv *pstapriv, u8 *hwaddr);
 extern u32 rtw_init_bcmc_stainfo(_adapter* padapter);
 extern struct sta_info* rtw_get_bcmc_stainfo(_adapter* padapter);
-extern u8 rtw_access_ctrl(struct wlan_acl_pool* pacl_list, u8 * mac_addr);
+extern u8 rtw_access_ctrl(_adapter *padapter, u8 *mac_addr);
 
 #endif //_STA_INFO_H_
+

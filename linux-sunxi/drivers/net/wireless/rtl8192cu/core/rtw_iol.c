@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Copyright(c) 2007 - 2011 Realtek Corporation. All rights reserved.
- *
+ *                                        
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
  * published by the Free Software Foundation.
@@ -34,15 +34,15 @@ struct xmit_frame	*rtw_IOL_accquire_xmit_frame(ADAPTER *adapter)
 		DBG_871X("%s rtw_alloc_xmitframe return null\n", __FUNCTION__);
 		goto exit;
 	}
-
+	
 	if ((xmitbuf = rtw_alloc_xmitbuf(pxmitpriv)) == NULL)
 	{
 		DBG_871X("%s rtw_alloc_xmitbuf return null\n", __FUNCTION__);
-		rtw_free_xmitframe_ex(pxmitpriv, xmit_frame);
+		rtw_free_xmitframe(pxmitpriv, xmit_frame);
 		xmit_frame=NULL;
 		goto exit;
 	}
-
+	
 	xmit_frame->frame_tag = MGNT_FRAMETAG;
 	xmit_frame->pxmitbuf = xmitbuf;
 	xmit_frame->buf_addr = xmitbuf->pbuf;
@@ -98,14 +98,14 @@ int rtw_IOL_append_cmds(struct xmit_frame *xmit_frame, u8 *IOL_cmds, u32 cmd_len
 	pattrib->last_txcmdsz += cmd_len;
 
 	//DBG_871X("%s ori:%u + cmd_len:%u = %u\n", __FUNCTION__, ori_len, cmd_len, buf_offset+pattrib->pktlen);
-
+	
 	return _SUCCESS;
 }
 
 int rtw_IOL_append_LLT_cmd(struct xmit_frame *xmit_frame, u8 page_boundary)
 {
 	IOL_CMD cmd = {0x0, IOL_CMD_LLT, 0x0, 0x0};
-
+	
 	RTW_PUT_BE32((u8*)&cmd.value, (u32)page_boundary);
 
 	return rtw_IOL_append_cmds(xmit_frame, (u8*)&cmd, 8);
@@ -114,7 +114,7 @@ int rtw_IOL_append_LLT_cmd(struct xmit_frame *xmit_frame, u8 page_boundary)
 int _rtw_IOL_append_WB_cmd(struct xmit_frame *xmit_frame, u16 addr, u8 value)
 {
 	IOL_CMD cmd = {0x0, IOL_CMD_WB_REG, 0x0, 0x0};
-
+	
 	RTW_PUT_BE16((u8*)&cmd.address, (u16)addr);
 	RTW_PUT_BE32((u8*)&cmd.value, (u32)value);
 
@@ -124,7 +124,7 @@ int _rtw_IOL_append_WB_cmd(struct xmit_frame *xmit_frame, u16 addr, u8 value)
 int _rtw_IOL_append_WW_cmd(struct xmit_frame *xmit_frame, u16 addr, u16 value)
 {
 	IOL_CMD cmd = {0x0, IOL_CMD_WW_REG, 0x0, 0x0};
-
+	
 	RTW_PUT_BE16((u8*)&cmd.address, (u16)addr);
 	RTW_PUT_BE32((u8*)&cmd.value, (u32)value);
 
@@ -135,7 +135,7 @@ int _rtw_IOL_append_WD_cmd(struct xmit_frame *xmit_frame, u16 addr, u32 value)
 {
 	IOL_CMD cmd = {0x0, IOL_CMD_WD_REG, 0x0, 0x0};
 	u8* pos = (u8 *)&cmd;
-
+	
 	RTW_PUT_BE16((u8*)&cmd.address, (u16)addr);
 	RTW_PUT_BE32((u8*)&cmd.value, (u32)value);
 
@@ -145,7 +145,7 @@ int _rtw_IOL_append_WD_cmd(struct xmit_frame *xmit_frame, u16 addr, u32 value)
 #ifdef DBG_IO
 int dbg_rtw_IOL_append_WB_cmd(struct xmit_frame *xmit_frame, u16 addr, u8 value, const char *caller, const int line)
 {
-	if(addr + 1 > DBG_IO_WRITE_SNIFF_ADDR_START && addr <= DBG_IO_WRITE_SNIFF_ADDR_END)
+	if (match_write_sniff_ranges(addr, 1))
 		DBG_871X("DBG_IO %s:%d IOL_WB(0x%04x, 0x%02x)\n", caller, line, addr, value);
 
 	return _rtw_IOL_append_WB_cmd(xmit_frame, addr, value);
@@ -153,7 +153,7 @@ int dbg_rtw_IOL_append_WB_cmd(struct xmit_frame *xmit_frame, u16 addr, u8 value,
 
 int dbg_rtw_IOL_append_WW_cmd(struct xmit_frame *xmit_frame, u16 addr, u16 value, const char *caller, const int line)
 {
-	if(addr + 2 > DBG_IO_WRITE_SNIFF_ADDR_START && addr <= DBG_IO_WRITE_SNIFF_ADDR_END)
+	if (match_write_sniff_ranges(addr, 2))
 		DBG_871X("DBG_IO %s:%d IOL_WW(0x%04x, 0x%04x)\n", caller, line, addr, value);
 
 	return _rtw_IOL_append_WW_cmd(xmit_frame, addr, value);
@@ -161,7 +161,7 @@ int dbg_rtw_IOL_append_WW_cmd(struct xmit_frame *xmit_frame, u16 addr, u16 value
 
 int dbg_rtw_IOL_append_WD_cmd(struct xmit_frame *xmit_frame, u16 addr, u32 value, const char *caller, const int line)
 {
-	if(addr + 4 > DBG_IO_WRITE_SNIFF_ADDR_START && addr <= DBG_IO_WRITE_SNIFF_ADDR_END)
+	if (match_write_sniff_ranges(addr, 4))
 		DBG_871X("DBG_IO %s:%d IOL_WD(0x%04x, 0x%08x)\n", caller, line, addr, value);
 
 	return _rtw_IOL_append_WD_cmd(xmit_frame, addr, value);
@@ -171,7 +171,7 @@ int dbg_rtw_IOL_append_WD_cmd(struct xmit_frame *xmit_frame, u16 addr, u32 value
 int rtw_IOL_append_DELAY_US_cmd(struct xmit_frame *xmit_frame, u16 us)
 {
 	IOL_CMD cmd = {0x0, IOL_CMD_DELAY_US, 0x0, 0x0};
-
+	
 	RTW_PUT_BE32((u8*)&cmd.value, (u32)us);
 
 	//DBG_871X("%s %u\n", __FUNCTION__, us);
@@ -182,7 +182,7 @@ int rtw_IOL_append_DELAY_US_cmd(struct xmit_frame *xmit_frame, u16 us)
 int rtw_IOL_append_DELAY_MS_cmd(struct xmit_frame *xmit_frame, u16 ms)
 {
 	IOL_CMD cmd = {0x0, IOL_CMD_DELAY_MS, 0x0, 0x0};
-
+	
 	RTW_PUT_BE32((u8*)&cmd.value, (u32)ms);
 
 	//DBG_871X("%s %u\n", __FUNCTION__, ms);
@@ -218,16 +218,13 @@ int rtw_IOL_append_END_cmd(struct xmit_frame *xmit_frame)
 	pattrib->last_txcmdsz += 8;
 
 	//DBG_871X("%s ori:%u + 8 = %u\n", __FUNCTION__ , ori_len, buf_offset+pattrib->pktlen);
-
+	
 	return _SUCCESS;
 }
 
 int rtw_IOL_exec_cmds_sync(ADAPTER *adapter, struct xmit_frame *xmit_frame, u32 max_wating_ms)
 {
-	if(adapter->HalFunc.IOL_exec_cmds_sync)
-		return adapter->HalFunc.IOL_exec_cmds_sync(adapter, xmit_frame, max_wating_ms);
-
-	return _FAIL;
+	return rtw_hal_iol_cmd(adapter, xmit_frame, max_wating_ms);
 }
 
 int rtw_IOL_exec_cmd_array_sync(PADAPTER adapter, u8 *IOL_cmds, u32 cmd_num, u32 max_wating_ms)
@@ -248,4 +245,19 @@ int rtw_IOL_exec_empty_cmds_sync(ADAPTER *adapter, u32 max_wating_ms)
 	IOL_CMD end_cmd = {0x0, IOL_CMD_END, 0x0, 0x0};
 	return rtw_IOL_exec_cmd_array_sync(adapter, (u8*)&end_cmd, 1, max_wating_ms);
 }
+
+bool rtw_IOL_applied(ADAPTER *adapter)
+{
+	if(adapter->registrypriv.force_iol)
+		return _TRUE;
+
+#ifdef CONFIG_USB_HCI
+	if(!adapter_to_dvobj(adapter)->ishighspeed)
+		return _TRUE;
+#endif
+
+	return _FALSE;
+}
+
 #endif //CONFIG_IOL
+

@@ -38,7 +38,11 @@
 		#define NR_RECVBUFF (4)
 	#endif
 #else
+#ifdef CONFIG_SINGLE_RECV_BUF
+	#define NR_RECVBUFF (1)
+#else
 	#define NR_RECVBUFF (4)
+#endif //CONFIG_SINGLE_RECV_BUF
 	#define NR_PREALLOC_RECV_SKB (8)
 #endif
 
@@ -57,7 +61,15 @@
 		//#define MAX_RECVBUF_SZ (32768) // 32k
 		//#define MAX_RECVBUF_SZ (16384) //16K
 		//#define MAX_RECVBUF_SZ (10240) //10K
-		#define MAX_RECVBUF_SZ (15360) // 15k < 16k
+		#ifdef CONFIG_PLATFORM_MSTAR
+			#define MAX_RECVBUF_SZ (8192) // 8K
+		#else
+			#ifndef CONFIG_USB_RX_AGGREGATION
+			#define MAX_RECVBUF_SZ (4000) // about 4K
+			#else
+			#define MAX_RECVBUF_SZ (15360) // 15k < 16k
+			#endif //CONFIG_USB_RX_AGGREGATION
+		#endif
 	#else
 		#define MAX_RECVBUF_SZ (4000) // about 4K
 	#endif

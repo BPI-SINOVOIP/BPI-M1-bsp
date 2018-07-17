@@ -16,8 +16,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110, USA
  *
  *
- 
-******************************************************************************/
+ ******************************************************************************/
 #ifndef __RTL8192C_CMD_H_
 #define __RTL8192C_CMD_H_
 
@@ -35,8 +34,21 @@ enum cmd_msg_element_id
 	MACID_PS_MODE_EID=7,
 	P2P_PS_OFFLOAD_EID=8,
 	SELECTIVE_SUSPEND_ROF_CMD=9,
+#ifdef CONFIG_WOWLAN
+	H2C_WO_WLAN_CMD = 26,	// Wake on Wlan.
+	EXT_MACID_PERIOD_EID = 27,	// support macid to 64
+	MACID64_CONFIG_EID = 28,	// support macid to 64
+#endif // CONFIG_WOWLAN
 	P2P_PS_CTW_CMD_EID=32,
 	H2C_92C_IO_OFFLOAD=44,
+#ifdef CONFIG_WOWLAN
+	KEEP_ALIVE_CONTROL_CMD=48,
+	DISCONNECT_DECISION_CTRL_CMD=49,
+	REMOTE_WAKE_CTRL_CMD=60,
+#endif // CONFIG_WOWLAN
+	H2C_92C_TSF_SYNC=67,
+	H2C_92C_DISABLE_BCN_FUNC=68,
+	H2C_92C_RESET_TSF = 75,
 	H2C_92C_CMD_MAX
 };
 
@@ -51,6 +63,28 @@ typedef struct _SETPWRMODE_PARM{
 	u8 	SmartPS;
 	u8	BcnPassTime;	// unit: 100ms
 }SETPWRMODE_PARM, *PSETPWRMODE_PARM;
+
+#ifdef CONFIG_WOWLAN
+typedef struct _SETWOWLAN_PARM{
+	u8 	mode;
+	u8 	gpio_index;
+	u8	gpio_duration;	
+	u8  second_mode;
+	u8  reserve;
+}SETWOWLAN_PARM, *PSETWOWLAN_PARM;
+
+#define FW_WOWLAN_FUN_EN			BIT(0)
+#define FW_WOWLAN_PATTERN_MATCH		BIT(1)
+#define FW_WOWLAN_MAGIC_PKT			BIT(2)
+#define FW_WOWLAN_UNICAST			BIT(3)
+#define FW_WOWLAN_ALL_PKT_DROP		BIT(4)
+#define FW_WOWLAN_GPIO_ACTIVE		BIT(5)
+#define FW_WOWLAN_REKEY_WAKEUP		BIT(6)
+#define FW_WOWLAN_DEAUTH_WAKEUP		BIT(7)
+
+#define FW_WOWLAN_GPIO_WAKEUP_EN	BIT(0)
+#define FW_FW_PARSE_MAGIC_PKT		BIT(1)
+#endif // CONFIG_WOWLAN
 
 struct H2C_SS_RFOFF_PARAM{
 	u8 	ROFOn; // 1: on, 0:off
@@ -101,5 +135,19 @@ typedef struct _IO_OFFLOAD_LOC{
 int rtl8192c_IOL_exec_cmds_sync(ADAPTER *adapter, struct xmit_frame *xmit_frame, u32 max_wating_ms);
 #endif //CONFIG_IOL
 
-#endif
+#ifdef CONFIG_BEACON_DISABLE_OFFLOAD
+u8 rtl8192c_dis_beacon_fun_cmd(_adapter* padapter);
+#endif  // CONFIG_BEACON_DISABLE_OFFLOAD
+
+
+#ifdef CONFIG_TSF_RESET_OFFLOAD
+int reset_tsf(PADAPTER Adapter, u8 reset_port );
+#endif	// CONFIG_TSF_RESET_OFFLOAD
+
+#ifdef CONFIG_WOWLAN
+void rtl8192c_set_wowlan_cmd(_adapter* padapter);
+void SetFwRelatedForWoWLAN8192CU(_adapter* 	padapter,u8 bHostIsGoingtoSleep);
+#endif // CONFIG_WOWLAN
+
+#endif	// __RTL8192C_CMD_H_
 

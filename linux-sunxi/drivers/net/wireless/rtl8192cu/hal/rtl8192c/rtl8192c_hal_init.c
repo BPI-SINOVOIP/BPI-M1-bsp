@@ -16,7 +16,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110, USA
  *
  *
- *******************************************************************************/
+ ******************************************************************************/
 
 #define _RTL8192C_HAL_INIT_C_
 #include <drv_conf.h>
@@ -123,22 +123,32 @@ _BlockWrite(
 	u8			*bufferPtr	= (u8 *)buffer;
 	u32			*pu4BytePtr	= (u32 *)buffer;
 	u32			i, offset, blockCount, remainSize;
+	u8			remainFW[4] = {0, 0, 0, 0};
+	u8			*p = NULL;
 
 	blockCount = size / blockSize;
 	remainSize = size % blockSize;
 
 	for(i = 0 ; i < blockCount ; i++){
 		offset = i * blockSize;
-		rtw_write32(Adapter, (FW_8192C_START_ADDRESS + offset), *(pu4BytePtr + i));
+		rtw_write32(Adapter, (FW_8192C_START_ADDRESS + offset), cpu_to_le32(*(pu4BytePtr + i)));
 	}
 
+	p = (u8*)((u32*)(bufferPtr + blockCount * blockSize));
 	if(remainSize){
-		offset = blockCount * blockSize;
-		bufferPtr += offset;
-		
-		for(i = 0 ; i < remainSize ; i++){
-			rtw_write8(Adapter, (FW_8192C_START_ADDRESS + offset + i), *(bufferPtr + i));
+		switch (remainSize) {
+		case 0:
+			break;
+		case 3:
+			remainFW[2]=*(p+2);
+		case 2: 	
+			remainFW[1]=*(p+1);
+		case 1: 	
+			remainFW[0]=*(p);
+			ret = rtw_write32(Adapter, (FW_8192C_START_ADDRESS + blockCount * blockSize), 
+				 le32_to_cpu(*(u32*)remainFW));	
 		}
+		return ret;
 	}
 #else
   
@@ -256,50 +266,36 @@ _WriteFW(
 	// We can remove _ReadChipVersion from ReadAdapterInfo8192C later.
 
 	int ret = _SUCCESS;
-	BOOLEAN			isNormalChip;	
-	HAL_DATA_TYPE	*pHalData = GET_HAL_DATA(Adapter);	
-	
-	isNormalChip = IS_NORMAL_CHIP(pHalData->VersionID);
-
-	if(isNormalChip){
-		u32 	pageNums,remainSize ;
-		u32 	page,offset;
-		u8*	bufferPtr = (u8*)buffer;
+	u32 	pageNums,remainSize ;
+	u32 	page,offset;
+	u8*	bufferPtr = (u8*)buffer;
 
 #ifdef CONFIG_PCI_HCI
-		// 20100120 Joseph: Add for 88CE normal chip. 
-		// Fill in zero to make firmware image to dword alignment.
-		_FillDummy(bufferPtr, &size);
+	// 20100120 Joseph: Add for 88CE normal chip. 
+	// Fill in zero to make firmware image to dword alignment.
+//		_FillDummy(bufferPtr, &size);
 #endif
 
-		pageNums = size / MAX_PAGE_SIZE ;		
-		//RT_ASSERT((pageNums <= 4), ("Page numbers should not greater then 4 \n"));			
-		remainSize = size % MAX_PAGE_SIZE;		
+	pageNums = size / MAX_PAGE_SIZE ;		
+	//RT_ASSERT((pageNums <= 4), ("Page numbers should not greater then 4 \n"));			
+	remainSize = size % MAX_PAGE_SIZE;		
+	
+	for(page = 0; page < pageNums;  page++){
+		offset = page *MAX_PAGE_SIZE;
+		ret = _PageWrite(Adapter,page, (bufferPtr+offset),MAX_PAGE_SIZE);			
 		
-		for(page = 0; page < pageNums;  page++){
-			offset = page *MAX_PAGE_SIZE;
-			ret = _PageWrite(Adapter,page, (bufferPtr+offset),MAX_PAGE_SIZE);			
-			
-			if(ret == _FAIL)
-				goto exit;
-		}
-		if(remainSize){
-			offset = pageNums *MAX_PAGE_SIZE;
-			page = pageNums;
-			ret = _PageWrite(Adapter,page, (bufferPtr+offset),remainSize);
-
-			if(ret == _FAIL)
-				goto exit;
-		}	
-		//RT_TRACE(COMP_INIT, DBG_LOUD, ("_WriteFW Done- for Normal chip.\n"));
+		if(ret == _FAIL)
+			goto exit;
 	}
-	else	{
-		ret = _BlockWrite(Adapter,buffer,size);
+	if(remainSize){
+		offset = pageNums *MAX_PAGE_SIZE;
+		page = pageNums;
+		ret = _PageWrite(Adapter,page, (bufferPtr+offset),remainSize);
 
 		if(ret == _FAIL)
 			goto exit;
-		//RT_TRACE(COMP_INIT, DBG_LOUD, ("_WriteFW Done- for Test chip.\n"));
-	}
+	}	
+	//RT_TRACE(COMP_INIT, DBG_LOUD, ("_WriteFW Done- for Normal chip.\n"));
 
 exit:
 	return ret;
@@ -417,19 +413,32 @@ u8	FwBuffer8192C[FW_8192C_SIZE];
 //
 //
 int FirmwareDownload92C(
-	IN	PADAPTER			Adapter
+	IN	PADAPTER			Adapter,
+	IN	BOOLEAN			bUsedWoWLANFw
 )
 {	
 	int	rtStatus = _SUCCESS;	
 	u8 writeFW_retry = 0;
+	u32 fwdl_start_time;
 	HAL_DATA_TYPE	*pHalData = GET_HAL_DATA(Adapter);
 	s8 			R92CFwImageFileName_TSMC[] ={RTL8192C_FW_TSMC_IMG};
 	s8 			R92CFwImageFileName_UMC[] ={RTL8192C_FW_UMC_IMG};
 	s8 			R92CFwImageFileName_UMC_B[] ={RTL8192C_FW_UMC_B_IMG};
+#ifdef CONFIG_WOWLAN
+	s8 			R92CFwImageFileName_TSMC_WW[] ={RTL8192C_FW_TSMC_WW_IMG};
+	s8 			R92CFwImageFileName_UMC_WW[] ={RTL8192C_FW_UMC_WW_IMG};
+	s8 			R92CFwImageFileName_UMC_B_WW[] ={RTL8192C_FW_UMC_B_WW_IMG};
+#endif //CONFIG_WOWLAN
+	
 	//s8 			R8723FwImageFileName_UMC[] ={RTL8723_FW_UMC_IMG};
 	u8*			FwImage = NULL;
 	u32			FwImageLen = 0;
 	char*		pFwImageFileName;	
+#ifdef CONFIG_WOWLAN
+	u8*			FwImageWoWLAN;
+	u32			FwImageWoWLANLen;
+	char*		pFwImageFileName_WoWLAN;
+#endif	//CONFIG_WOWLAN
 	u8*			pucMappedFile = NULL;
 	//vivi, merge 92c and 92s into one driver, 20090817
 	//vivi modify this temply, consider it later!!!!!!!!
@@ -448,39 +457,43 @@ int FirmwareDownload92C(
 		goto Exit;
 	}
 
-	if(IS_NORMAL_CHIP(pHalData->VersionID))
+	if(IS_VENDOR_UMC_A_CUT(pHalData->VersionID) && !IS_92C_SERIAL(pHalData->VersionID))
 	{
-		if(IS_VENDOR_UMC_A_CUT(pHalData->VersionID) && !IS_92C_SERIAL(pHalData->VersionID))
-		{
-			pFwImageFileName = R92CFwImageFileName_UMC;
-			FwImage = Rtl819XFwUMCACutImageArray;
-			FwImageLen = UMCACutImgArrayLength;
-			DBG_8192C(" ===> FirmwareDownload91C() fw:Rtl819XFwImageArray_UMC\n");
-		}
-		else if(IS_81xxC_VENDOR_UMC_B_CUT(pHalData->VersionID))
-		{
-			// The ROM code of UMC B-cut Fw is the same as TSMC. by tynli. 2011.01.14.
-			pFwImageFileName = R92CFwImageFileName_UMC_B;
-			FwImage = Rtl819XFwUMCBCutImageArray;
-			FwImageLen = UMCBCutImgArrayLength;
-			DBG_8192C(" ===> FirmwareDownload91C() fw:Rtl819XFwImageArray_UMC_B\n");
-		}
-		else
-		{
-			pFwImageFileName = R92CFwImageFileName_TSMC;
-			FwImage = Rtl819XFwTSMCImageArray;
-			FwImageLen = TSMCImgArrayLength;
-			DBG_8192C(" ===> FirmwareDownload91C() fw:Rtl819XFwImageArray_TSMC\n");
-		}
+		pFwImageFileName = R92CFwImageFileName_UMC;
+		FwImage = Rtl819XFwUMCACutImageArray;
+		FwImageLen = UMCACutImgArrayLength;
+#ifdef CONFIG_WOWLAN
+		pFwImageFileName_WoWLAN = R92CFwImageFileName_UMC_WW;
+		FwImageWoWLAN= Rtl8192C_FwUMCWWImageArray;
+		FwImageWoWLANLen =UMCACutWWImgArrayLength ;
+#endif	//CONFIG_WOWLAN		
+		DBG_8192C(" ===> FirmwareDownload91C() fw:Rtl819XFwImageArray_UMC\n");
+	}
+	else if(IS_81xxC_VENDOR_UMC_B_CUT(pHalData->VersionID))
+	{
+		// The ROM code of UMC B-cut Fw is the same as TSMC. by tynli. 2011.01.14.
+		pFwImageFileName = R92CFwImageFileName_UMC_B;
+		FwImage = Rtl819XFwUMCBCutImageArray;
+		FwImageLen = UMCBCutImgArrayLength;
+#ifdef CONFIG_WOWLAN
+		pFwImageFileName_WoWLAN = R92CFwImageFileName_UMC_B_WW;
+		FwImageWoWLAN= Rtl8192C_FwUMCBCutWWImageArray;
+		FwImageWoWLANLen =UMCBCutWWImgArrayLength ;
+#endif //CONFIG_WOWLAN
+		
+		DBG_8192C(" ===> FirmwareDownload91C() fw:Rtl819XFwImageArray_UMC_B\n");
 	}
 	else
 	{
-	#if 0
-		pFwImageFileName = TestChipFwFile;
-		FwImage = Rtl8192CTestFwImg;
-		FwImageLen = Rtl8192CTestFwImgLen;
-		RT_TRACE(COMP_INIT, DBG_LOUD, (" ===> FirmwareDownload91C() fw:Rtl8192CTestFwImg\n"));
-	#endif
+		pFwImageFileName = R92CFwImageFileName_TSMC;
+		FwImage = Rtl819XFwTSMCImageArray;
+		FwImageLen = TSMCImgArrayLength;
+#ifdef CONFIG_WOWLAN
+		pFwImageFileName_WoWLAN = R92CFwImageFileName_TSMC_WW;
+		FwImageWoWLAN= Rtl8192C_FwTSMCWWImageArray;
+		FwImageWoWLANLen =TSMCWWImgArrayLength ;
+#endif //CONFIG_WOWLAN
+		DBG_8192C(" ===> FirmwareDownload91C() fw:Rtl819XFwImageArray_TSMC\n");
 	}
 
 	//RT_TRACE(COMP_INIT, DBG_LOUD, (" ===> FirmwareDownload91C() fw:%s\n", pFwImageFileName));
@@ -525,9 +538,25 @@ int FirmwareDownload92C(
 
 			pFirmware->szFwBuffer = FwImage;
 			pFirmware->ulFwLength = FwImageLen;
+#ifdef CONFIG_WOWLAN
+			{
+				pFirmware->szWoWLANFwBuffer=FwImageWoWLAN;
+				pFirmware->ulWoWLANFwLength = FwImageWoWLANLen;
+			}
+#endif //CONFIG_WOWLAN
+			
 			break;
 	}
 
+#ifdef CONFIG_WOWLAN	
+	if(bUsedWoWLANFw)	{		
+		pFirmwareBuf = pFirmware->szWoWLANFwBuffer;		
+		FirmwareLen = pFirmware->ulWoWLANFwLength;		
+		pFwHdr = (PRT_8192C_FIRMWARE_HDR)pFirmware->szWoWLANFwBuffer;	
+	}	
+	else
+#endif	//CONFIG_WOWLAN
+	{	
 	#ifdef DBG_FW_STORE_FILE_PATH //used to store firmware to file...
 	if(pFirmware->ulFwLength > 0)
 	{
@@ -540,7 +569,7 @@ int FirmwareDownload92C(
 
 	// To Check Fw header. Added by tynli. 2009.12.04.
 	pFwHdr = (PRT_8192C_FIRMWARE_HDR)pFirmware->szFwBuffer;
-
+	}
 	pHalData->FirmwareVersion =  le16_to_cpu(pFwHdr->Version); 
 	pHalData->FirmwareSubVersion = le16_to_cpu(pFwHdr->Subversion); 
 
@@ -567,6 +596,7 @@ int FirmwareDownload92C(
 
 		
 	_FWDownloadEnable(Adapter, _TRUE);
+	fwdl_start_time = rtw_get_current_time();
 	while(1) {
 		u8 tmp8;
 		tmp8 = rtw_read8(Adapter, REG_MCUFWDL);
@@ -582,10 +612,18 @@ int FirmwareDownload92C(
 		//tmp8 = rtw_read8(Adapter, REG_MCUFWDL);
 		//DBG_8192C("After _WriteFW, REG_MCUFWDL:0x%02x, rtStatus:%d\n", tmp8, rtStatus);
 
-		if(rtStatus == _SUCCESS || ++writeFW_retry>3)
+		if(rtStatus == _SUCCESS || Adapter->bDriverStopped || Adapter->bSurpriseRemoved
+			|| (writeFW_retry++ >= 3 && rtw_get_passing_time_ms(fwdl_start_time) > 500)
+		)
 			break;
 	} 
 	_FWDownloadEnable(Adapter, _FALSE);
+
+	DBG_871X("%s writeFW_retry:%u, time after fwdl_start_time:%ums\n", __FUNCTION__
+		, writeFW_retry
+		, rtw_get_passing_time_ms(fwdl_start_time)
+	);
+
 	if(_SUCCESS != rtStatus){
 		DBG_8192C("DL Firmware failed!\n");
 		goto Exit;
@@ -622,6 +660,53 @@ InitializeFirmwareVars92C(
 	//Init H2C counter. by tynli. 2009.12.09.
 	pHalData->LastHMEBoxNum = 0;
 }
+
+#ifdef CONFIG_WOWLAN
+//===========================================
+
+//
+// Description: Prepare some information to Fw for WoWLAN.
+//			(1) Download wowlan Fw.
+//			(2) Download RSVD page packets.
+//			(3) Enable AP offload if needed.
+//
+// 2011.04.12 by tynli.
+//
+VOID
+SetFwRelatedForWoWLAN8192CU(
+	IN	PADAPTER			padapter,
+	IN	u8			bHostIsGoingtoSleep
+)
+{	
+	int	status=_FAIL;
+	HAL_DATA_TYPE	*pHalData = GET_HAL_DATA(padapter);
+	u8	 bRecover = _FALSE;
+	
+	if(bHostIsGoingtoSleep)
+	{
+		//
+		// 1. Before WoWLAN we need to re-download WoWLAN Fw.
+		//
+		status = FirmwareDownload92C(padapter, bHostIsGoingtoSleep);
+		if(status != _SUCCESS)
+		{
+			DBG_8192C("ConfigFwRelatedForWoWLAN8192CU(): Re-Download Firmware failed!!\n");
+			return;
+		}
+		else
+		{
+			DBG_8192C("ConfigFwRelatedForWoWLAN8192CU(): Re-Download Firmware Success !!\n");
+		}
+
+		//
+		// 2. Re-Init the variables about Fw related setting.
+		//
+		InitializeFirmwareVars92C(padapter);
+
+		
+	}
+}
+#endif // CONFIG_WOWLAN
 
 #ifdef CONFIG_BT_COEXIST
 static void _update_bt_param(_adapter *padapter)
@@ -717,7 +802,6 @@ void rtl8192c_ReadBluetoothCoexistInfo(
 	)
 {
 	HAL_DATA_TYPE	*pHalData = GET_HAL_DATA(Adapter);
-	BOOLEAN			isNormal = IS_NORMAL_CHIP(pHalData->VersionID);
 	struct btcoexist_priv	*pbtpriv = &(pHalData->bt_coexist);
 	u8	rf_opt4;
 
@@ -730,19 +814,13 @@ void rtl8192c_ReadBluetoothCoexistInfo(
 		return;
 	}
 
-	if(isNormal)
-	{
-		pbtpriv->BT_Coexist = (((PROMContent[EEPROM_RF_OPT1]&BOARD_TYPE_NORMAL_MASK)>>5) == BOARD_USB_COMBO)?_TRUE:_FALSE;	// bit [7:5]
-		rf_opt4 = PROMContent[EEPROM_RF_OPT4];
-		pbtpriv->BT_CoexistType 		= ((rf_opt4&0xe)>>1);			// bit [3:1]
-		pbtpriv->BT_Ant_Num 		= (rf_opt4&0x1);				// bit [0]
-		pbtpriv->BT_Ant_isolation 	= ((rf_opt4&0x10)>>4);			// bit [4]
-		pbtpriv->BT_RadioSharedType 	= ((rf_opt4&0x20)>>5);			// bit [5]
-	}
-	else
-	{
-		pbtpriv->BT_Coexist = (PROMContent[EEPROM_RF_OPT4] >> 4) ? _TRUE : _FALSE;	
-	}
+	pbtpriv->BT_Coexist = (((PROMContent[EEPROM_RF_OPT1]&BOARD_TYPE_NORMAL_MASK)>>5) == BOARD_USB_COMBO)?_TRUE:_FALSE;	// bit [7:5]
+	rf_opt4 = PROMContent[EEPROM_RF_OPT4];
+	pbtpriv->BT_CoexistType 		= ((rf_opt4&0xe)>>1);			// bit [3:1]
+	pbtpriv->BT_Ant_Num 		= (rf_opt4&0x1);				// bit [0]
+	pbtpriv->BT_Ant_isolation 	= ((rf_opt4&0x10)>>4);			// bit [4]
+	pbtpriv->BT_RadioSharedType 	= ((rf_opt4&0x20)>>5);			// bit [5]
+
 	_update_bt_param(Adapter);
 
 }
@@ -764,7 +842,7 @@ rtl8192c_ReadChipVersion(
 	{
 #if 0
 		// Test chip.
-		if(IS_HARDWARE_TYPE_8723(Adapter)) {
+		if(IS_HARDWARE_TYPE_8723A(Adapter)) {
 			ChipVersion |= ((value32 & VENDOR_ID) ? CHIP_VENDOR_UMC : 0);
 			ChipVersion |= ((value32 & BT_FUNC) ? CHIP_8723: 0); // RTL8723 with BT function.			
 		}
@@ -846,7 +924,7 @@ rtl8192c_ReadChipVersion(
 		}
 		else if(IS_8723_SERIES(ChipVersion))
 		{
-			//RT_ASSERT(IS_HARDWARE_TYPE_8723(Adapter), ("Incorrect chip version!!\n"));
+			//RT_ASSERT(IS_HARDWARE_TYPE_8723A(Adapter), ("Incorrect chip version!!\n"));
 			value32 = rtw_read32(Adapter, REG_GPIO_OUTSTS);
 			ChipVersion |= ((value32 & RF_RL_ID)>>20);	 //ROM code version.	
 		}
@@ -940,35 +1018,22 @@ rtl8192c_ReadChipVersion(
 	return ChipVersion;
 }
 
-
-RT_CHANNEL_DOMAIN
-_HalMapChannelPlan8192C(
-	IN	PADAPTER	Adapter,
-	IN	u8		HalChannelPlan
+void
+rtl8192c_EfuseParseChnlPlan(
+	IN	PADAPTER		padapter,
+	IN	u8*			hwinfo,
+	IN	BOOLEAN			AutoLoadFail
 	)
 {
-	RT_CHANNEL_DOMAIN	rtChannelDomain;
+	padapter->mlmepriv.ChannelPlan = hal_com_get_channel_plan(
+		padapter
+		, hwinfo?hwinfo[EEPROM_CHANNEL_PLAN]:0xFF
+		, padapter->registrypriv.channel_plan
+		, RT_CHANNEL_DOMAIN_WORLD_WIDE_13
+		, AutoLoadFail
+	);
 
-	switch(HalChannelPlan)
-	{
-#if 0 /* Not using EEPROM_CHANNEL_PLAN directly */
-		case EEPROM_CHANNEL_PLAN_GLOBAL_DOMAIN:
-			rtChannelDomain = RT_CHANNEL_DOMAIN_GLOBAL_DOAMIN;
-			break;
-		case EEPROM_CHANNEL_PLAN_WORLD_WIDE_13:
-			rtChannelDomain = RT_CHANNEL_DOMAIN_WORLD_WIDE_13;
-			break;			
-#endif /* Not using EEPROM_CHANNEL_PLAN directly */
-		default:
-			if(HalChannelPlan == 0xFF)
-				rtChannelDomain = RT_CHANNEL_DOMAIN_WORLD_WIDE_13;
-			else
-				rtChannelDomain = (RT_CHANNEL_DOMAIN)HalChannelPlan;
-			break;
-	}
-	
-	return 	rtChannelDomain;
-
+	DBG_871X("mlmepriv.ChannelPlan = 0x%02x\n", padapter->mlmepriv.ChannelPlan);
 }
 
 u8 GetEEPROMSize8192C(PADAPTER Adapter)
@@ -984,42 +1049,6 @@ u8 GetEEPROMSize8192C(PADAPTER Adapter)
 	return size;
 }
 
-void rtl8192c_HalSetBrateCfg(
-	IN PADAPTER		Adapter,
-	IN u8			*mBratesOS,
-	OUT u16			*pBrateCfg
-)
-{
-	u8	is_brate;
-	u8	i;
-	u8	brate;
-
-	for(i=0;i<NDIS_802_11_LENGTH_RATES_EX;i++)
-	{
-		is_brate = mBratesOS[i] & IEEE80211_BASIC_RATE_MASK;
-		brate = mBratesOS[i] & 0x7f;
-		if( is_brate )
-		{
-			switch(brate)
-			{
-				case IEEE80211_CCK_RATE_1MB:	*pBrateCfg |= RATE_1M;	break;
-				case IEEE80211_CCK_RATE_2MB:	*pBrateCfg |= RATE_2M;	break;
-				case IEEE80211_CCK_RATE_5MB:	*pBrateCfg |= RATE_5_5M;break;
-				case IEEE80211_CCK_RATE_11MB:	*pBrateCfg |= RATE_11M;	break;
-				case IEEE80211_OFDM_RATE_6MB:	*pBrateCfg |= RATE_6M;	break;
-				case IEEE80211_OFDM_RATE_9MB:	*pBrateCfg |= RATE_9M;	break;
-				case IEEE80211_OFDM_RATE_12MB:	*pBrateCfg |= RATE_12M;	break;
-				case IEEE80211_OFDM_RATE_18MB:	*pBrateCfg |= RATE_18M;	break;
-				case IEEE80211_OFDM_RATE_24MB:	*pBrateCfg |= RATE_24M;	break;
-				case IEEE80211_OFDM_RATE_36MB:	*pBrateCfg |= RATE_36M;	break;
-				case IEEE80211_OFDM_RATE_48MB:	*pBrateCfg |= RATE_48M;	break;
-				case IEEE80211_OFDM_RATE_54MB:	*pBrateCfg |= RATE_54M;	break;			
-			}
-		}
-
-	}
-}
-
 void rtl8192c_free_hal_data(_adapter * padapter)
 {
 _func_enter_;
@@ -1027,7 +1056,7 @@ _func_enter_;
 	DBG_8192C("=====> rtl8192c_free_hal_data =====\n");
 
 	if(padapter->HalData)
-		rtw_mfree(padapter->HalData, sizeof(HAL_DATA_TYPE));
+		rtw_vmfree(padapter->HalData, sizeof(HAL_DATA_TYPE));
 	DBG_8192C("<===== rtl8192c_free_hal_data =====\n");
 
 _func_exit_;
@@ -1155,7 +1184,7 @@ rtl8192c_EfusePowerSwitch(
 	{
 		hal_EfusePowerSwitch_RTL8192C(pAdapter, bWrite, PwrState);
 	}
-	else if(IS_HARDWARE_TYPE_8723(pAdapter))
+	else if(IS_HARDWARE_TYPE_8723A(pAdapter))
 	{
 		hal_EfusePowerSwitch_RTL8723(pAdapter, bWrite, PwrState);
 	}	
@@ -1282,8 +1311,8 @@ ReadEFuse_RTL8192C(
 	// 5. Calculate Efuse utilization.
 	//
 	efuse_usage = (u8)((efuse_utilized*100)/EFUSE_REAL_CONTENT_LEN);
-	Adapter->HalFunc.SetHwRegHandler(Adapter, HW_VAR_EFUSE_BYTES, (u8 *)&efuse_utilized);
-	//Adapter->HalFunc.SetHwRegHandler(Adapter, HW_VAR_EFUSE_USAGE, (pu1Byte)&efuse_usage);
+	rtw_hal_set_hwreg(Adapter, HW_VAR_EFUSE_BYTES, (u8 *)&efuse_utilized);
+	//rtw_hal_set_hwreg(Adapter, HW_VAR_EFUSE_USAGE, (pu1Byte)&efuse_usage);
 }
 
 static VOID
@@ -1444,8 +1473,8 @@ ReadEFuse_RTL8723(
 	// 5. Calculate Efuse utilization.
 	//
 	efuse_usage = (u8)((efuse_utilized*100)/EFUSE_REAL_CONTENT_LEN);
-	Adapter->HalFunc.SetHwRegHandler(Adapter, HW_VAR_EFUSE_BYTES, (u8 *)&efuse_utilized);
-	//Adapter->HalFunc.SetHwRegHandler(Adapter, HW_VAR_EFUSE_USAGE, (pu1Byte)&efuse_usage);
+	rtw_hal_set_hwreg(Adapter, HW_VAR_EFUSE_BYTES, (u8 *)&efuse_utilized);
+	//rtw_hal_set_hwreg(Adapter, HW_VAR_EFUSE_USAGE, (pu1Byte)&efuse_usage);
 }
 
 static BOOLEAN
@@ -1466,7 +1495,7 @@ Hal_EfuseSwitchToBank(
 	}
 	else
 	{
-		if(IS_HARDWARE_TYPE_8723(pAdapter) && 
+		if(IS_HARDWARE_TYPE_8723A(pAdapter) && 
 			INCLUDE_MULTI_FUNC_BT(pAdapter))
 		{		
 			value32 = rtw_read32(pAdapter, EFUSE_TEST);
@@ -1733,7 +1762,7 @@ ReadEFuseByIC(
 		{
 			ReadEFuse_RTL8192C(Adapter, _offset, _size_byte, pbuf, bPseudoTest);
 		}
-		else if(IS_HARDWARE_TYPE_8723(Adapter))
+		else if(IS_HARDWARE_TYPE_8723A(Adapter))
 		{
 			ReadEFuse_RTL8723(Adapter, _offset, _size_byte, pbuf, bPseudoTest);
 		}
@@ -1799,7 +1828,7 @@ Hal_EFUSEGetEfuseDefinition(
 					{
 						*pMax_section = EFUSE_MAX_SECTION;
 					}
-					else if(IS_HARDWARE_TYPE_8723(pAdapter))
+					else if(IS_HARDWARE_TYPE_8723A(pAdapter))
 					{
 						*pMax_section = EFUSE_MAX_SECTION_8723;
 					}
@@ -1849,7 +1878,7 @@ Hal_EFUSEGetEfuseDefinition(
 					{
 						*pu2Tmp = (u16)EFUSE_MAP_LEN;
 					}
-					else if(IS_HARDWARE_TYPE_8723(pAdapter))
+					else if(IS_HARDWARE_TYPE_8723A(pAdapter))
 					{
 						*pu2Tmp = (u16)EFUSE_MAP_LEN_8723;
 					}
@@ -2225,7 +2254,7 @@ hal_EfuseGetCurrentSize_8723(IN	PADAPTER	pAdapter,
 	}
 	else
 	{
-		pAdapter->HalFunc.GetHwRegHandler(pAdapter, HW_VAR_EFUSE_BYTES, (u8 *)&efuse_addr);
+		rtw_hal_get_hwreg(pAdapter, HW_VAR_EFUSE_BYTES, (u8 *)&efuse_addr);
 	}
 	//RTPRINT(FEEPROM, EFUSE_PG, ("hal_EfuseGetCurrentSize_8723(), start_efuse_addr = %d\n", efuse_addr));
 	
@@ -2273,7 +2302,7 @@ hal_EfuseGetCurrentSize_8723(IN	PADAPTER	pAdapter,
 	}
 	else
 	{
-		pAdapter->HalFunc.SetHwRegHandler(pAdapter, HW_VAR_EFUSE_BYTES, (u8 *)&efuse_addr);
+		rtw_hal_set_hwreg(pAdapter, HW_VAR_EFUSE_BYTES, (u8 *)&efuse_addr);
 		//RTPRINT(FEEPROM, EFUSE_PG, ("hal_EfuseGetCurrentSize_8723(), return %d\n", efuse_addr));
 	}
 	
@@ -2311,7 +2340,7 @@ rtl8192c_EfuseGetCurrentSize(
 			{
 				ret = hal_EfuseGetCurrentSize_8192C(pAdapter, bPseudoTest);
 			}
-			else if(IS_HARDWARE_TYPE_8723(pAdapter))
+			else if(IS_HARDWARE_TYPE_8723A(pAdapter))
 			{
 				ret = hal_EfuseGetCurrentSize_8723(pAdapter, bPseudoTest);
 			}
@@ -2536,7 +2565,7 @@ Hal_EfusePgPacketRead(	IN	PADAPTER	pAdapter,
 	{
 		ret = hal_EfusePgPacketRead_8192C(pAdapter, offset, data, bPseudoTest);
 	}
-	else if(IS_HARDWARE_TYPE_8723(pAdapter))
+	else if(IS_HARDWARE_TYPE_8723A(pAdapter))
 	{
 		ret = hal_EfusePgPacketRead_8723(pAdapter, offset, data, bPseudoTest);
 	}
@@ -2949,7 +2978,7 @@ hal_EfusePartialWriteCheck(
 		}
 		else
 		{
-			pAdapter->HalFunc.GetHwRegHandler(pAdapter, HW_VAR_EFUSE_BYTES, (u8 *)&startAddr);
+			rtw_hal_get_hwreg(pAdapter, HW_VAR_EFUSE_BYTES, (u8 *)&startAddr);
 			startAddr%=EFUSE_REAL_CONTENT_LEN;
 		}
 	}
@@ -3438,7 +3467,7 @@ Hal_EfusePgPacketWrite(IN	PADAPTER	pAdapter,
 	{
 		ret = hal_EfusePgPacketWrite_8192C(pAdapter, offset, word_en, data, bPseudoTest);
 	}
-	else if(IS_HARDWARE_TYPE_8723(pAdapter))
+	else if(IS_HARDWARE_TYPE_8723A(pAdapter))
 	{
 		ret = hal_EfusePgPacketWrite_8723(pAdapter, offset, word_en, data, bPseudoTest);
 	}
@@ -3496,7 +3525,156 @@ void rtl8192c_read_chip_version(PADAPTER	pAdapter)
 	HAL_DATA_TYPE	*pHalData	= GET_HAL_DATA(pAdapter);
 	pHalData->VersionID = rtl8192c_ReadChipVersion(pAdapter);
 }
+
+void hal_notch_filter_8192c(_adapter *adapter, bool enable)
+{
+	if (enable) {
+		DBG_871X("Enable notch filter\n");
+		rtw_write8(adapter, rOFDM0_RxDSP+1, rtw_read8(adapter, rOFDM0_RxDSP+1) | BIT1);
+	} else {
+		DBG_871X("Disable notch filter\n");
+		rtw_write8(adapter, rOFDM0_RxDSP+1, rtw_read8(adapter, rOFDM0_RxDSP+1) & ~BIT1);
+	}
+}
+
+void hal_reset_security_engine_8192c(_adapter * adapter)
+{
+	rtw_write8(adapter, 0x522, 0xFF);
+	rtw_write8(adapter, 0x21, 0x35);
+	rtw_usleep_os(300);
+	rtw_write8(adapter, 0x101, rtw_read8(adapter,0x101)&~0x02);
+	rtw_write8(adapter, 0x101, rtw_read8(adapter,0x101)|0x02);
+	rtw_write8(adapter, 0x21, 0x55);
+	rtw_write8(adapter, 0x522, 0x00);
+}
+
+s32 c2h_id_filter_ccx_8192c(u8 id)
+{
+	s32 ret = _FALSE;
+	if (id == C2H_CCX_TX_RPT)
+		ret = _TRUE;
 	
+	return ret;
+}
+
+static s32 c2h_handler_8192c(_adapter *padapter, struct c2h_evt_hdr *c2h_evt)
+{
+	s32 ret = _SUCCESS;
+	u8 i = 0;
+
+	if (c2h_evt == NULL) {
+		DBG_8192C("%s c2h_evt is NULL\n",__FUNCTION__);
+		ret = _FAIL;
+		goto exit;
+	}
+
+	switch (c2h_evt->id) {
+	case C2H_CCX_TX_RPT:
+		handle_txrpt_ccx_8192c(padapter, c2h_evt->payload);
+		break;
+	default:
+		ret = _FAIL;
+		break;
+	}
+
+exit:
+	return ret;
+}
+
+void SetHwReg8192C(_adapter *adapter, u8 variable, u8 *val)
+{
+	HAL_DATA_TYPE *hal_data = GET_HAL_DATA(adapter);
+
+	switch (variable) {
+	case HW_VAR_BASIC_RATE:
+	{
+		struct mlme_ext_info *mlmext_info = &adapter->mlmeextpriv.mlmext_info;
+		u16 input_b = 0, masked = 0, ioted = 0, BrateCfg = 0;
+		u16 rrsr_2g_force_mask = (RRSR_11M|RRSR_5_5M|RRSR_1M);
+		u16 rrsr_2g_allow_mask = (RRSR_24M|RRSR_12M|RRSR_6M|RRSR_11M|RRSR_5_5M|RRSR_1M);
+		u8 RateIndex = 0;
+	
+		HalSetBrateCfg(adapter, val, &BrateCfg);
+		input_b = BrateCfg;
+	
+		/* apply force and allow mask */
+		BrateCfg |= rrsr_2g_force_mask;
+		BrateCfg &= rrsr_2g_allow_mask;
+		masked = BrateCfg;
+	
+		/* IOT consideration */
+		if (mlmext_info->assoc_AP_vendor == ciscoAP) {
+			/* if peer is cisco and didn't use ofdm rate, we enable 6M ack */
+			if((BrateCfg & (RRSR_24M|RRSR_12M|RRSR_6M)) == 0)
+				BrateCfg |= RRSR_6M;
+		}
+		if (mlmext_info->assoc_AP_vendor == atherosAP)
+			BrateCfg |= RRSR_2M;
+		ioted = BrateCfg;
+	
+		hal_data->BasicRateSet = BrateCfg;
+	
+		DBG_8192C("HW_VAR_BASIC_RATE: %#x -> %#x -> %#x\n", input_b, masked, ioted);
+	
+		// Set RRSR rate table.
+		rtw_write16(adapter, REG_RRSR, BrateCfg);
+		rtw_write8(adapter, REG_RRSR+2, rtw_read8(adapter, REG_RRSR+2)&0xf0);
+	
+		// Set RTS initial rate
+		while(BrateCfg > 0x1)
+		{
+			BrateCfg = (BrateCfg>> 1);
+			RateIndex++;
+		}
+		// Ziv - Check
+		rtw_write8(adapter, REG_INIRTS_RATE_SEL, RateIndex);
+	}
+		break;
+	default:
+		SetHwReg(adapter, variable, val);
+		break;
+	}
+}
+
+void GetHwReg8192C(_adapter *adapter, u8 variable, u8 *val)
+{
+	HAL_DATA_TYPE *hal_data = GET_HAL_DATA(adapter);
+
+	switch (variable) {
+	default:
+		GetHwReg(adapter, variable, val);
+		break;
+	}
+}
+
+u8 SetHalDefVar8192C(_adapter *adapter, HAL_DEF_VARIABLE variable, void *val)
+{
+	HAL_DATA_TYPE *hal_data = GET_HAL_DATA(adapter);
+	u8 bResult = _SUCCESS;
+
+	switch(variable) {
+	default:
+		bResult = SetHalDefVar(adapter, variable, val);
+		break;
+	}
+
+	return bResult;
+}
+
+u8 GetHalDefVar8192C(_adapter *adapter, HAL_DEF_VARIABLE variable, void *val)
+{
+	HAL_DATA_TYPE *hal_data = GET_HAL_DATA(adapter);
+	u8 bResult = _SUCCESS;
+
+	switch(variable) {
+	default:
+		bResult = GetHalDefVar(adapter, variable, val);
+		break;
+	}
+
+	return bResult;
+}
+
 void rtl8192c_set_hal_ops(struct hal_ops *pHalFunc)
 {
 	pHalFunc->free_hal_data = &rtl8192c_free_hal_data;
@@ -3513,15 +3691,15 @@ void rtl8192c_set_hal_ops(struct hal_ops *pHalFunc)
 	pHalFunc->Add_RateATid = &rtl8192c_Add_RateATid;
 
 #ifdef CONFIG_ANTENNA_DIVERSITY
-	pHalFunc->SwAntDivBeforeLinkHandler = &SwAntDivBeforeLink8192C;
-	pHalFunc->SwAntDivCompareHandler = &SwAntDivCompare8192C;
+	pHalFunc->AntDivBeforeLinkHandler = &SwAntDivBeforeLink8192C;
+	pHalFunc->AntDivCompareHandler = &SwAntDivCompare8192C;
 #endif
 
 	pHalFunc->read_bbreg = &rtl8192c_PHY_QueryBBReg;
 	pHalFunc->write_bbreg = &rtl8192c_PHY_SetBBReg;
 	pHalFunc->read_rfreg = &rtl8192c_PHY_QueryRFReg;
-	pHalFunc->write_rfreg = &rtl8192c_PHY_SetRFReg;	
-	
+	pHalFunc->write_rfreg = &rtl8192c_PHY_SetRFReg;
+
 	//Efuse related function
 	pHalFunc->EfusePowerSwitch = &rtl8192c_EfusePowerSwitch;
 	pHalFunc->ReadEFuse = &rtl8192c_ReadEFuse;
@@ -3532,16 +3710,22 @@ void rtl8192c_set_hal_ops(struct hal_ops *pHalFunc)
 	pHalFunc->Efuse_WordEnableDataWrite = &rtl8192c_Efuse_WordEnableDataWrite;
 
 #ifdef DBG_CONFIG_ERROR_DETECT
-	pHalFunc->sreset_init_value = &rtl8192c_sreset_init_value;
-	pHalFunc->sreset_reset_value = &rtl8192c_sreset_reset_value;	
-	pHalFunc->silentreset = &rtl8192c_silentreset_for_specific_platform;
+	pHalFunc->sreset_init_value = &sreset_init_value;
+	pHalFunc->sreset_reset_value = &sreset_reset_value;	
+	pHalFunc->silentreset = &sreset_reset;
 	pHalFunc->sreset_xmit_status_check = &rtl8192c_sreset_xmit_status_check;
 	pHalFunc->sreset_linked_status_check  = &rtl8192c_sreset_linked_status_check;
-	pHalFunc->sreset_get_wifi_status  = &rtl8192c_sreset_get_wifi_status;
+	pHalFunc->sreset_get_wifi_status  = &sreset_get_wifi_status;
+	pHalFunc->sreset_inprogress= &sreset_inprogress;
 #endif
 
 #ifdef CONFIG_IOL
 	pHalFunc->IOL_exec_cmds_sync = &rtl8192c_IOL_exec_cmds_sync;
 #endif
+	pHalFunc->hal_notch_filter = &hal_notch_filter_8192c;
+	pHalFunc->hal_reset_security_engine = hal_reset_security_engine_8192c;
+
+	pHalFunc->c2h_handler = c2h_handler_8192c;
+	pHalFunc->c2h_id_filter_ccx = c2h_id_filter_ccx_8192c;
 }
 
