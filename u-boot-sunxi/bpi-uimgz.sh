@@ -2,6 +2,8 @@
 U=u-boot-2018.01
 
 BOARD=$1
+TYPE=$2
+
 if [ -z $BOARD ] ; then
 	echo "usage: $0 BOARD"
 	exit 1
@@ -9,7 +11,12 @@ fi
 
 echo ${BOARD}
 UBOOTBIN=out/${BOARD}/u-boot-sunxi-with-spl.bin
-UBOOTIMG=out/${U}-${BOARD}-8k.img
+if [ "$2" = "lcd" ]; then
+	UBOOTIMG=out/${U}-${BOARD}-${TYPE}-8k.img
+else
+	UBOOTIMG=out/${U}-${BOARD}-8k.img
+fi
+
 if [ -f ${UBOOTBIN} ] ; then
 	cp -a ${UBOOTBIN} ${UBOOTIMG}
 else

@@ -58,5 +58,5 @@ mkdir -p $KBUILD_OUTPUT
 export CROSS_COMPILE=arm-linux-gnueabihf-
 make $NEWBPICONF
 make -j8
-./bpi-uimgz.sh $BOARD
+./bpi-uimgz.sh $BOARD $2
 
