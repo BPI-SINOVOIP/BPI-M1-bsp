@@ -198,6 +198,17 @@ int board_cfb_skip(void)
 }
 #endif
 
+/* set display type, lcd or hdmi */
+static void bpi_distype_env_set(void)
+{
+	char *lcd_mode = CONFIG_VIDEO_LCD_MODE;
+
+	if (lcd_mode[0] != 0)
+		env_set("distype", "lcd");
+	else
+		env_set("distype", "hdmi");
+}
+
 /* add board specific code here */
 int board_init(void)
 {
@@ -751,6 +762,8 @@ int misc_init_r(void)
 	} else if (boot == BOOT_DEVICE_MMC2) {
 		env_set("mmc_bootdev", "1");
 	}
+
+	bpi_distype_env_set();
 
 	setup_environment(gd->fdt_blob);
 
