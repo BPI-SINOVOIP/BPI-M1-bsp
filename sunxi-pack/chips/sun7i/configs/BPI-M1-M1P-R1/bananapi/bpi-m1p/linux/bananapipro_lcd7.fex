@@ -173,14 +173,14 @@ uart_rts = port:PI16<3><1><default><default>
 uart_cts = port:PI17<3><1><default><default>
 
 [uart_para3]
-uart_used = 0
+uart_used = 1
 uart_port = 3
 uart_type = 2
 uart_tx = port:PH00<4><1><default><default>
 uart_rx = port:PH01<4><1><default><default>
 
 [uart_para4]
-uart_used = 1
+uart_used = 0
 uart_port = 4
 uart_type = 2
 uart_tx = port:PH04<4><1><default><default>
@@ -244,7 +244,7 @@ spi_mosi = port:PA07<3><default><default><default>
 spi_miso = port:PA08<3><default><default><default>
 
 [spi_devices]
-spi_dev_num = 2
+spi_dev_num = 1
 
 [spi_board0]
 modalias = "spidev"
@@ -817,9 +817,9 @@ kp_out6 = port:PH26<4><1><default><default>
 kp_out7 = port:PH27<4><1><default><default>
 
 [usbc0]
-usb_used = 1
+usb_used = 0
 usb_port_type = 2
-usb_detect_type = 0
+usb_detect_type = 1
 usb_id_gpio = port:PH04<0><1><default><default>
 usb_det_vbus_gpio = "axp_ctrl"
 usb_drv_vbus_gpio = port:PB09<1><0><default><0>
@@ -834,7 +834,7 @@ usb_restric_capacity = 5
 usb_used = 1
 usb_port_type = 1
 usb_detect_type = 0
-usb_drv_vbus_gpio = port:PH00<1><0><default><0>
+usb_drv_vbus_gpio = port:PH27<1><0><default><0>
 usb_restrict_gpio =
 usb_host_init_state = 1
 usb_restric_flag = 0
@@ -843,7 +843,7 @@ usb_restric_flag = 0
 usb_used = 1
 usb_port_type = 1
 usb_detect_type = 0
-usb_drv_vbus_gpio = port:PH01<1><0><default><0>
+usb_drv_vbus_gpio = port:PH27<1><0><default><0>
 usb_restrict_gpio =
 usb_host_init_state = 1
 usb_restric_flag = 0
@@ -980,7 +980,7 @@ ir0_rx = port:PB04<2><default><default><default>
 
 [pmu_para]
 pmu_used = 1
-pmu_twi_addr = 52
+pmu_twi_addr = 0x34
 pmu_twi_id = 0
 pmu_irq_id = 32
 pmu_battery_rdc = 100

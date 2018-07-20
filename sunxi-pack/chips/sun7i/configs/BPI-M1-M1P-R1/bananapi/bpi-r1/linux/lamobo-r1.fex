@@ -183,11 +183,11 @@ uart_tx = port:PH00<4><1><default><default>
 uart_rx = port:PH01<4><1><default><default>
 
 [uart_para4]
-uart_used = 0
+uart_used = 1
 uart_port = 4
 uart_type = 2
-uart_tx = port:PH04<4><1><default><default>
-uart_rx = port:PH05<4><1><default><default>
+uart_tx = port:PG10<4><1><default><default>
+uart_rx = port:PG11<4><1><default><default>
 
 [uart_para5]
 uart_used = 0
@@ -247,7 +247,7 @@ spi_mosi = port:PA07<3><default><default><default>
 spi_miso = port:PA08<3><default><default><default>
 
 [spi_devices]
-spi_dev_num = 2
+spi_dev_num = 1
 
 [spi_board0]
 modalias = "spidev"
@@ -282,9 +282,8 @@ ctp_int_port = port:PH09<6><default><default><default>
 ctp_wakeup = port:PH07<1><default><default><1>
 ctp_io_port = port:PH09<0><default><default><default>
 
-
 [ctp_list_para]
-ctp_det_used = 1
+ctp_det_used = 0
 ft5x_ts = 1
 gt82x = 0
 gslX680 = 0
@@ -840,7 +839,7 @@ usb_restric_capacity = 5
 usb_used = 1
 usb_port_type = 1
 usb_detect_type = 0
-usb_drv_vbus_gpio = port:PH06<1><0><default><0>
+usb_drv_vbus_gpio = port:PH27<1><0><default><0>
 usb_restrict_gpio =
 usb_host_init_state = 1
 usb_restric_flag = 0
@@ -849,7 +848,7 @@ usb_restric_flag = 0
 usb_used = 1
 usb_port_type = 1
 usb_detect_type = 0
-usb_drv_vbus_gpio = port:PH03<1><0><default><0>
+usb_drv_vbus_gpio = port:PH27<1><0><default><0>
 usb_restrict_gpio =
 usb_host_init_state = 1
 usb_restric_flag = 0
@@ -902,19 +901,12 @@ gps_vcc_en = port:PC22<1><default><default><0>
 gps_osc_en = port:PI14<1><default><default><0>
 gps_rx_en = port:PI15<1><default><default><0>
 
-[wifi_para]
-wifi_used = 0
-wifi_sdc_id = 3
-wifi_usbc_id = 2
-wifi_usbc_type = 1
-wifi_mod_sel = 6
-wifi_power = ""
-ap6xxx_wl_regon = port:PH09<1><default><default><0>
-ap6xxx_wl_host_wake = port:PH10<0><default><default><0>
-ap6xxx_bt_regon = port:PH18<1><default><default><0>
-ap6xxx_bt_wake = port:PH24<1><default><default><0>
-ap6xxx_bt_host_wake = port:PH25<0><default><default><0>
-ap6xxx_lpo = port:PI12<4><1><default><1>
+[sdio_wifi_pro_para]
+sdio_wifi_pro_used = 0
+sdio_wifi_pro_sdc_id = 3
+sdio_wifi_pro_mod_sel = 7
+ap6xxx_wl_regon = port:PH22<1><default><default><0>
+ap6xxx_wl_vdd_en = port:PH27<1><default><default><0>
 
 [usb_wifi_para]
 usb_wifi_used = 1
@@ -985,8 +977,7 @@ leds_used = 1
 leds_num = 1
 leds_pin_1 = port:PH24<1><default><default><0>
 leds_name_1 = "green:ph24:led1"
-leds_default_1 = 1
-leds_trigger_1 = "heartbeat"
+leds_trigger_1 = "mmc0"
 
 [ir_para]
 ir_used = 1
@@ -994,7 +985,7 @@ ir0_rx = port:PB04<2><default><default><default>
 
 [pmu_para]
 pmu_used = 1
-pmu_twi_addr = 52
+pmu_twi_addr = 0x34
 pmu_twi_id = 0
 pmu_irq_id = 32
 pmu_battery_rdc = 100
